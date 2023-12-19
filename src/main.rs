@@ -1,16 +1,12 @@
-use std::{io, collections::HashMap};
-
+use std::io;
 use legion::{*, world::SubWorld, systems::CommandBuffer};
 use rnglib::{RNG, Language};
 use rand::{Rng, random};
 
+#[derive(Clone)]
 struct Person {
 	name: String,
-    coolness: i32
-}
-
-struct Likes_Talking_to {
-    ent: Entity
+	coolness: i32
 }
 
 impl Person {
@@ -24,77 +20,58 @@ impl Person {
     }
 }
 
+struct WantsToTalkTo{
+    entities: Vec<Entity>
+}
+
 #[system]
 #[read_component(Person)]
-#[write_component(Person)]
-#[read_component(Entity)]
-#[write_component(Entity)]
-fn find_people_to_talk_to( world: &mut SubWorld, commands: &mut CommandBuffer){
-	let mut entities = <(Entity, &Person)>::query();
-	let mut just_persons = <Read<Person>>::query();
-	let mut pv: Vec<i32> = Vec::new();
-	let mut counter: i32 = 0;
-    for (e,p) in entities.iter(world) {
-        // println!("finding people for {} to talk to", p.name);
-		pv.push( p.coolness);
-		// counter += 1;
+pub fn wants_to_talk_to( world: &SubWorld, commands: &mut CommandBuffer){
+	let mut entity_person = <(Entity, &Person)>::query();
+    let mut sorted: Vec<(&Entity, &Person)> = entity_person
+        .iter(world)
+        .map(|(e,p)| (e, p))
+        .collect();
+    sorted.sort_by(|a,b| a.1.coolness.cmp(&b.1.coolness));    
+    entity_person.iter(world).for_each(|(e, p)|{
+        let current_coolness = p.coolness;
+        let mut talk_to_vec: Vec<Entity> = Vec::new();
+        // Could b-search but too lazy
+        for  (next_e,next_p) in sorted.iter(){
+            if *next_e == e {
+                continue;
+            }
+            if current_coolness <= next_p.coolness{
+                talk_to_vec.push(**next_e);
+            }
+        }
+        commands.add_component(*e, WantsToTalkTo{entities: talk_to_vec});
+    });
+}
+
+#[system(for_each)]
+#[read_component(Person)]
+pub fn announce_conversation_interest(world: &SubWorld, e: &Entity, p: &Person, w: &WantsToTalkTo){
+    for(entity) in &w.entities{
+        let included_entry = world.entry_ref(*entity);
+        if let Ok(found_entry) = included_entry{
+            let potential_person = found_entry.get_component::<Person>().expect("fuck");
+            println!("{} wants to talk to {}", p.name, potential_person.name);
+        }
     }
-	pv.sort();
-	let mut coll: Vec<Entity> = Vec::new();
-	let mut rm: Vec<(&Entity, &Person)>= entities.iter(world).map(|(e,p)| (e, p)).collect::<Vec<_>>();
-	rm.sort_by(|a, b| a.1.coolness.cmp(&b.1.coolness));
-	let mut correlation_map: HashMap<&Entity, &Entity> = HashMap::new();
-	for i in 0..rm.len(){
-		if i >= rm.len() -1 {
-			break;
-		}
-		correlation_map.insert(rm[i].0, rm[i+1].0);
-		let mut cp = rm[i];
-		let vv = pv[i];
-		// let mut mutable_ent = world.entry(entity)
-		
-		// println!("{} should be {}", cp.1.coolness, vv);
-		world.entry_ref(*rm[i].0);
-	}
-	// let (mut left, right) = world.split::<&mut Entity>();
-	for (k, v) in correlation_map {
-		// let e_ref = world
-		// 	.entry_mut(*k)
-		// 	.unwrap()
-		// 	.get_component_mut::<Person>();
-		// if let Ok(person_from_ent) = e_ref {
-
-		// }
-
-		println!("asdf");
-
-	}
-
-	// for (e,p) in entities.iter_mut(world){
-	// 	let real_ent = world.entry_mut(*e);
-	// }	
-
-	// for (e, p) in rm {
-	// 	println!("{} is a {}", p.name, p.coolness);
-	// 	// println!("{} wwww", pv[])
-	// }
-		// .sort_by(|a, b| 
-		// 	a.1.coolness.cmp(&b.1.coolness).then_with(|| a.1.name.cmp(&b.1.name)));
-
-	// let rv:Vec<&Entity> = rm.collect();
-	// let pp = rm.
-	// for(e, p) in entities.iter_mut(world). {
-	// 	coll.push(*e);
-	// }
 }
 
 fn main() {
     let mut world = World::default();
-    for _ in 0..rand::thread_rng().gen_range(2..11){
+    for _ in 0..rand::thread_rng().gen_range(3..5){
         world.push((Person::new(),));
     }
     let mut schedule_builder = Schedule::builder();
-    schedule_builder.add_system(find_people_to_talk_to_system());
+    schedule_builder
+        .add_system(wants_to_talk_to_system())
+        .flush()
+        .add_system(announce_conversation_interest_system())
+        .flush();
     let mut schedule = schedule_builder.build();
     let mut resources = Resources::default();
     print_world(&world);
