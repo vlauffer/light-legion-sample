@@ -55,7 +55,7 @@ pub fn announce_conversation_interest(world: &SubWorld, e: &Entity, p: &Person, 
     for(entity) in &w.entities{
         let included_entry = world.entry_ref(*entity);
         if let Ok(found_entry) = included_entry{
-            let potential_person = found_entry.get_component::<Person>().expect("fuck");
+            let potential_person = found_entry.get_component::<Person>().expect("oh no");
             println!("{} wants to talk to {}", p.name, potential_person.name);
         }
     }
@@ -75,8 +75,9 @@ fn main() {
     let mut schedule = schedule_builder.build();
     let mut resources = Resources::default();
     print_world(&world);
+    println!("Hit return to step forward. Hit q and return to quit\n");
     loop{
-		println!("Hit return to step forward. Hit q and return to quit");
+		
         schedule.execute(&mut world, &mut resources);
         let mut input = String::new();
 		io::stdin().read_line(&mut input).expect("Failed to read line");
